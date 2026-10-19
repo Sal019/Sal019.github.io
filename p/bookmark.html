@@ -1606,6 +1606,34 @@ Credit
 document.addEventListener('click',function(e){var b=e.target&&e.target.closest?e.target.closest('.bookmark-btn'):null;if(b){e.preventDefault();e.stopPropagation();window.location.href='/p/bookmark.html';}},true);
 </script>
 <script>
+/* Keep the header on view pages: the app's router removes .top-header (and the
+   theme modal) when a view page (player, library, ...) is shown. Hold references
+   to both and put them back if the app removes them. */
+(function(){
+ var hdr=document.querySelector('.top-header');
+ var modal=document.getElementById('theme-modal-overlay');
+ if(!hdr&&!modal)return;
+ var anchor=document.getElementById('mobileSidebar')||document.getElementById('details-page-container');
+ function place(node,after){
+  if(!node||document.contains(node))return;
+  if(after&&after.parentNode===document.body){document.body.insertBefore(node,after.nextSibling);}
+  else if(anchor&&anchor.parentNode===document.body){document.body.insertBefore(node,anchor);}
+  else if(document.body.firstChild){document.body.insertBefore(node,document.body.firstChild);}
+  else{document.body.appendChild(node);}
+ }
+ function restore(){
+  if(hdr){hdr.classList.add('loaded');place(hdr,null);}
+  if(modal){place(modal,hdr);}
+ }
+ var mo=new MutationObserver(restore);
+ mo.observe(document.body,{childList:true});
+ setTimeout(restore,1000);
+ setTimeout(restore,2500);
+ setTimeout(restore,5000);
+ setTimeout(function(){mo.disconnect();restore();},12000);
+})();
+</script>
+<script>
 /* Supabase permanently removed from this static copy.
    The original template loaded the Supabase JS library and used it for a
    license check (which redirected unlicensed domains to the seller's
