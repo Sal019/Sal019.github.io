@@ -88,12 +88,12 @@ every link stays on **your** site and opens the right view.
      K-Drama / C-Drama) is shown **only on the Home page** — it is hidden
      on every other page (Details, Player, Library, Bookmarks, Account,
      About, Privacy, Disclaimer).
-   - **Header restored on view pages**: the template's own router deletes
-     the top header (`.top-header`) and the theme modal when a view page
-     (Player, Library, …) opens — in this static pack that left those
-     pages with no header at all. A small guard script on every `/p/`
-     page holds both elements and puts them back if the app removes them,
-     so the header now stays on all pages.
+   - **Header kept permanently on Player/Library**: the template's own
+     router deletes the top header (`.top-header`) when the Player or
+     Library view opens, leaving those pages headerless. In this copy
+     that single removal statement in the app code is disabled, so the
+     header now stays on those pages exactly as on every other page —
+     natively, with no added scripts.
    - **Comments & reactions removed** (later the same day): the whole
      `#comment-section` block on the Player view — the emoji reaction bar
      ("What's your opinion on this?" 👍😝😍😮😠😢) and the comment box,
