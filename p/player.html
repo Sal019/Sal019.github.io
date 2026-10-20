@@ -1742,5 +1742,168 @@ _WidgetManager._RegisterWidget('_TextView', new _WidgetInfo('Text12', 'footer', 
 _WidgetManager._RegisterWidget('_TextView', new _WidgetInfo('Text13', 'footer', document.getElementById('Text13'), {}, 'displayModeFull'));
 _WidgetManager._RegisterWidget('_TextView', new _WidgetInfo('Text14', 'footer', document.getElementById('Text14'), {}, 'displayModeFull'));
 </script>
+
+<script id='subdub-server-script'>
+/* SubDub server for the player: adds ONE extra server button ('SubDub') to the
+   existing server list when the current title is also posted on the
+   SubDubAnime blog. Episodes then play from the blog's own servers.
+   If the title is not on the blog, this changes nothing. */
+(function () {
+  'use strict';
+  try {
+    var qs = new URLSearchParams(location.search);
+    var tmdbId = qs.get('id');
+    var type = qs.get('type') || 'tv';
+    if (!tmdbId) return;
+    var BLOG = 'https://www.subdubanime.site';
+    var seasons = {};   // { '1': { eids: {1:'eid'}, blakite: {tmdb:'13916', count:37} } }
+    var myBtn = null, myActive = false, curUrl = null, cbN = 0;
+
+    function norm(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+    function postSeason(title) {
+      var m = /season\s*(\d+)/i.exec(title || '');
+      return m ? String(parseInt(m[1], 10)) : '1';
+    }
+    function jsonp(url) {
+      return new Promise(function (resolve) {
+        var cb = '__sdsCb' + (++cbN) + '_' + Date.now();
+        var sc = document.createElement('script');
+        var timer = setTimeout(function () { cleanup(); resolve(null); }, 12000);
+        function cleanup() { clearTimeout(timer); try { delete window[cb]; } catch (e) { window[cb] = undefined; } if (sc.parentNode) sc.parentNode.removeChild(sc); }
+        window[cb] = function (data) { cleanup(); resolve(data); };
+        sc.src = url + (url.indexOf('?') < 0 ? '?' : '&') + 'callback=' + cb;
+        sc.onerror = function () { cleanup(); resolve(null); };
+        document.head.appendChild(sc);
+      });
+    }
+    function parseEntry(e, pageTitleNorm) {
+      var title = (e.title && e.title.$t) || '';
+      var content = (e.content && e.content.$t) || '';
+      var season = postSeason(title);
+      var bd = /<div id="blakiteapi" data-tmdb="(\d+)" data-season="(\d+)" data-episodes="(\d+)"/.exec(content);
+      if (bd && bd[1] === String(tmdbId)) {
+        var bs = seasons[bd[2]] || (seasons[bd[2]] = { eids: {}, blakite: null });
+        bs.blakite = { tmdb: bd[1], count: parseInt(bd[3], 10) };
+        return true;
+      }
+      var pairs = content.match(/\d+\s*:\s*\{[^}]*?EID:\s*'[^']+'/g) || [];
+      if (!pairs.length) return false;
+      var blogNorm = norm(title.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/season\s*\d+/i, ' '));
+      if (!blogNorm || (blogNorm !== pageTitleNorm && blogNorm.indexOf(pageTitleNorm) < 0 && pageTitleNorm.indexOf(blogNorm) < 0)) return false;
+      var s = seasons[season] || (seasons[season] = { eids: {}, blakite: null });
+      pairs.forEach(function (p) {
+        var m = /(\d+)\s*:\s*\{[^}]*?EID:\s*'([^']+)'/.exec(p);
+        if (m) s.eids[m[1]] = m[2];
+      });
+      return Object.keys(s.eids).length > 0;
+    }
+    function currentSE() {
+      var a = document.querySelector('.episode-btn.active');
+      if (a && a.dataset) return { season: String(a.dataset.season || '1'), ep: String(a.dataset.ep || '1') };
+      return { season: '1', ep: '1' };
+    }
+    function urlFor(season, ep) {
+      var s = seasons[season];
+      if (!s) return null;
+      if (s.eids && s.eids[ep]) return 'https://rubyvidhub.com/embed-' + s.eids[ep] + '.html?streamrurucy=true';
+      if (s.blakite && parseInt(ep, 10) <= s.blakite.count) return 'https://blakiteapi.xyz/embed/' + s.blakite.tmdb + '/' + season + '-' + ep;
+      return null;
+    }
+    function playerFrame() {
+      var c = document.getElementById('abefilm-player-container');
+      return (c && c.querySelector('iframe')) || document.querySelector('iframe');
+    }
+    function deactivate() {
+      myActive = false;
+      if (myBtn) myBtn.classList.remove('active');
+    }
+    function ensureButton() {
+      var list = document.querySelector('.server-list');
+      if (!list) return;
+      var se = currentSE();
+      curUrl = urlFor(se.season, se.ep);
+      if (!curUrl) {
+        if (myBtn) {
+          var wasActive = myActive;
+          myBtn.remove(); myBtn = null; myActive = false;
+          if (wasActive) { var first = list.querySelector('.server-btn:not(.subdub-server-btn)'); if (first) first.click(); }
+        }
+        return;
+      }
+      if (!myBtn || !list.contains(myBtn)) {
+        var proto = list.querySelector('.server-btn');
+        if (!proto) return;
+        myBtn = proto.cloneNode(true);
+        myBtn.classList.remove('active');
+        myBtn.classList.add('subdub-server-btn');
+        myBtn.removeAttribute('data-index');
+        var img = myBtn.querySelector('img');
+        if (img) { img.src = 'https://www.google.com/s2/favicons?domain=subdubanime.site&sz=32'; img.alt = 'SubDub logo'; img.onerror = null; }
+        var span = myBtn.querySelector('span');
+        if (span) span.textContent = 'SubDub';
+        myBtn.addEventListener('click', function (ev) {
+          ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation();
+          var l = document.querySelector('.server-list');
+          if (l) l.querySelectorAll('.server-btn').forEach(function (b) { b.classList.remove('active'); });
+          myBtn.classList.add('active'); myActive = true;
+          var se2 = currentSE(); var u = urlFor(se2.season, se2.ep);
+          var f = playerFrame(); if (f && u) f.src = u;
+        }, true);
+        list.appendChild(myBtn);
+      }
+    }
+    function watchChanges() {
+      var lastKey = '';
+      setInterval(function () {
+        var se = currentSE();
+        var key = se.season + '-' + se.ep;
+        var hadKey = lastKey;
+        lastKey = key;
+        ensureButton();
+        if (hadKey && key !== hadKey && myActive) {
+          var u = urlFor(se.season, se.ep);
+          var f = playerFrame();
+          if (u && f) f.src = u;
+        }
+      }, 800);
+      document.addEventListener('click', function (e) {
+        var b = e.target && e.target.closest ? e.target.closest('.server-btn') : null;
+        if (b && !b.classList.contains('subdub-server-btn')) deactivate();
+      }, true);
+    }
+    function start() {
+      var cacheKey = 'subdub_srv_' + tmdbId;
+      try {
+        var cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+        if (cached && cached.t && Date.now() - cached.t < 7 * 24 * 3600 * 1000) {
+          seasons = cached.seasons || {};
+          ensureButton(); watchChanges(); return;
+        }
+      } catch (e) {}
+      var title = document.title || '';
+      var got = function () {
+        var pageNorm = norm(title.replace(/season\s*\d+/i, ' '));
+        jsonp(BLOG + '/feeds/posts/default?alt=json-in-script&max-results=25&q=' + encodeURIComponent(title)).then(function (data) {
+          var entries = (data && data.feed && data.feed.entry) || [];
+          entries.forEach(function (e) { parseEntry(e, pageNorm); });
+          try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), seasons: seasons })); } catch (e) {}
+          ensureButton(); watchChanges();
+        });
+      };
+      if (window.apiKey) {
+        fetch('https://api.themoviedb.org/3/' + (type === 'movie' ? 'movie' : 'tv') + '/' + tmdbId + '?api_key=' + window.apiKey)
+          .then(function (r) { return r.json(); })
+          .then(function (d) { if (d) title = d.name || d.title || title; got(); })
+          .catch(got);
+      } else { got(); }
+    }
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      if (document.querySelector('.server-list .server-btn') || tries > 40) { clearInterval(iv); start(); }
+    }, 500);
+  } catch (e) { /* never break the player */ }
+})();
+</script>
 </body>
 </html>
